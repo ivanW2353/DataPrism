@@ -9,9 +9,12 @@ from dataprism.pipeline.full_pipeline import DataPrismPipeline
 class TestPipelineConfig:
     """Test pipeline configuration and initialization."""
 
-    def test_pipeline_init_all_disabled(self, sample_config_dict):
+    def test_pipeline_init_all_disabled(self):
         """Pipeline should initialize with all phases disabled."""
-        config = DataPrismConfig(**sample_config_dict)
+        config = DataPrismConfig()
+        config.phase1.enabled = False
+        config.phase2.enabled = False
+        config.phase3.enabled = False
         pipeline = DataPrismPipeline(config)
         assert pipeline is not None
 

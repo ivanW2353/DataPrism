@@ -56,14 +56,15 @@ class TemperatureScheduler:
         Returns:
             Temperature value.
         """
+        if self._strategy == "constant":
+            return self._initial_tau
+
         if step >= self._schedule_length:
             return self._tau_min
 
         progress = step / max(self._schedule_length, 1)
 
-        if self._strategy == "constant":
-            return self._initial_tau
-        elif self._strategy == "linear":
+        if self._strategy == "linear":
             return self._initial_tau - (self._initial_tau - self._tau_min) * progress
         elif self._strategy == "cosine":
             return self._tau_min + 0.5 * (self._initial_tau - self._tau_min) * (
