@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dataprism"
+version = "0.1.0"
+description = "DataPrism: A Gradient-Driven Data Selection Framework for LLM Fine-Tuning"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "DataPrism Team"}
+]
+dependencies = [
+    "torch>=2.1.0",
+    "transformers>=4.45.0",
+    "peft>=0.13.0",
+    "datasets>=3.0.0",
+    "accelerate>=1.0.0",
+    "numpy",
+    "scipy",
+    "scikit-learn",
+    "pyyaml>=6.0",
+    "tqdm",
+    "wandb",
+    "h5py",
+    "safetensors",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "flake8",
+    "isort",
+    "black",
+]
+eval = [
+    "openai",
+]
+
+[project.scripts]
+dataprism = "scripts.run_pipeline:main"
+
+[tool.setuptools.packages.find]
+include = ["dataprism*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 100

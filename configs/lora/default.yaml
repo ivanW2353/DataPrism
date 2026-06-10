@@ -1,0 +1,18 @@
+# LoRA default configuration (r=64, alpha=128)
+# This is the recommended setting for 7-8B models
+
+lora:
+  r: 64
+  alpha: 128
+  dropout: 0.1
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+  target_modules_extra:
+    - gate_proj
+    - up_proj
+    - down_proj
+  bias: none
+  task_type: CAUSAL_LM

@@ -1,0 +1,5 @@
+from dataprism.evaluation.mmlu_eval import evaluate_mmlu
+from dataprism.evaluation.gsm8k_eval import evaluate_gsm8k
+from dataprism.evaluation.humaneval_eval import evaluate_humaneval
+from dataprism.evaluation.mt_bench_eval import evaluate_mt_bench
+from dataprism.evaluation.alpaca_eval import evaluate_alpaca

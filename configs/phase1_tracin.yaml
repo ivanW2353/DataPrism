@@ -1,0 +1,25 @@
+# Phase 1: LoRA-space TracInCP offline data quality screening
+
+phase1:
+  enabled: true
+  num_epochs: 2
+  checkpoint_every_n_steps: 50
+  max_checkpoints: 20
+
+  # Self-influence computation
+  self_influence_method: dot_product  # dot_product or cosine
+  normalize_gradients: true
+
+  # Outlier detection (high self-influence = possibly mislabeled)
+  outlier_percentile: 95.0
+  min_samples_after_filter: 5000
+
+  # Redundancy removal via gradient vector clustering
+  redundancy_method: kmeans  # kmeans, agglomerative, or none
+  redundancy_similarity_threshold: 0.85
+  redundancy_clusters: null  # auto-determined if null
+  max_samples_after_redundancy: 50000
+
+  # Storage paths
+  checkpoint_dir: outputs/checkpoints/phase1
+  influence_store_path: outputs/influences/phase1_self_influence.h5

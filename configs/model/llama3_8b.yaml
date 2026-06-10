@@ -1,0 +1,8 @@
+# Llama-3-8B model configuration
+
+model:
+  name: meta-llama/Meta-Llama-3-8B
+  trust_remote_code: false
+  torch_dtype: bfloat16
+  use_flash_attention_2: true
+  device_map: auto

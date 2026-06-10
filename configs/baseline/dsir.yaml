@@ -1,0 +1,13 @@
+# Baseline: DSIR (Xie et al., NeurIPS 2023)
+# Distribution-matching importance resampling
+
+selection:
+  method: dsir
+  fraction: 0.2
+  # DSIR-specific settings
+  dsir:
+    feature_type: ngram  # ngram or hashed_ngram
+    ngram_size: 3
+    num_features: 10000
+    target_dataset: alpaca  # Dataset to match distribution of
+    importance_smoothing: 0.01

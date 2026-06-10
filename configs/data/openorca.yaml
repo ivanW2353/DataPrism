@@ -1,0 +1,11 @@
+# OpenOrca dataset configuration
+
+data:
+  name: Open-Orca/OpenOrca
+  split: train
+  num_samples: null
+  validation_split: train  # Use subset for validation
+  max_eval_samples: 500
+  prompt_template: sharegpt
+  response_only_loss: true
+  shuffle_seed: 42

@@ -1,0 +1,11 @@
+# WizardLM-70K dataset configuration
+
+data:
+  name: WizardLM/WizardLM_evol_instruct_V2_196k
+  split: train
+  num_samples: null
+  validation_split: null
+  max_eval_samples: 500
+  prompt_template: sharegpt
+  response_only_loss: true
+  shuffle_seed: 42

@@ -1,0 +1,59 @@
+# Phase 3: Validation-set-driven iterative data reselection
+
+phase3:
+  enabled: true
+
+  # Multi-dimensional validation sets
+  validation_sets:
+    reasoning:
+      source: gsm8k
+      split: test
+      num_samples: 500
+    safety:
+      source: PKU-Alignment/PKU-SafeRLHF
+      split: test
+      num_samples: 500
+    chat:
+      source: lmsys/mt_bench
+      split: train
+      num_samples: 500
+    factual:
+      source: hotpot_qa
+      split: validation
+      num_samples: 500
+
+  # Objective importance weights (sum to 1.0)
+  lambda_weights:
+    reasoning: 0.30
+    safety: 0.25
+    chat: 0.25
+    factual: 0.20
+
+  # Iterative reselection
+  selection_fraction: 0.5
+  max_rounds: 5
+  min_rounds: 2
+
+  # Per-sample weight adjustment
+  proponent_weight_boost: 2.0
+  opponent_weight_decay: 0.5
+  neutral_label_threshold: 0.05  # |influence| < threshold → neutral
+
+  # TracInVS settings
+  tracin_vs_num_checkpoints: null  # null = use same count as Phase 1
+  tracin_vs_checkpoint_dir: outputs/checkpoints/phase3
+
+evaluation:
+  benchmarks:
+    - mmlu
+    - gsm8k
+    - humaneval
+    - mt_bench
+    - alpaca_eval
+  mmlu_num_fewshot: 5
+  gsm8k_num_fewshot: 8
+  gsm8k_use_cot: true
+  humaneval_num_samples: 1
+  mt_bench_num_turns: 2
+  save_results: true
+  results_dir: outputs/results

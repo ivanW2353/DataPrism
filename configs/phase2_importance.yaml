@@ -1,0 +1,21 @@
+# Phase 2: Online importance sampling based on gradient norm upper bounds
+
+phase2:
+  enabled: true
+
+  # Candidate pre-sampling: sample (candidate_multiplier * batch_size) each step
+  candidate_multiplier: 4
+
+  # Temperature schedule for softmax sampling
+  initial_tau: 1.0
+  tau_annealing: linear  # linear, cosine, constant
+  tau_min: 0.1
+  tau_schedule_length: 5000  # steps
+
+  # Variance reduction tracking (fall back to uniform if no reduction)
+  variance_ema_alpha: 0.95
+  variance_reduction_threshold: 0.05
+  recheck_interval: 100  # steps between variance re-evaluations
+
+  # Weight clipping to prevent extreme importance weights
+  importance_weight_clip: 10.0

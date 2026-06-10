@@ -1,0 +1,12 @@
+# Baseline: LESS (Xia et al., ICML 2024)
+# Representation similarity-based data selection
+
+selection:
+  method: less
+  fraction: 0.2
+  # LESS-specific settings
+  less:
+    num_warmup_steps: 100
+    representation_dim: 4096
+    similarity_metric: cosine
+    checkpoint_ensemble: true

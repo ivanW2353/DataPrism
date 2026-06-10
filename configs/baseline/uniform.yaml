@@ -1,0 +1,6 @@
+# Baseline: Uniform random sampling
+# Lower bound — no intelligent selection
+
+selection:
+  method: uniform
+  fraction: 0.2  # Retain 20% of data

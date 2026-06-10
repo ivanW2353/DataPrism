@@ -1,0 +1,12 @@
+# Baseline: RHO-LOSS (Mindermann et al., NeurIPS 2022)
+# Online holdout-loss-based data selection
+
+selection:
+  method: rho_loss
+  fraction: 0.2
+  # RHO-LOSS-specific settings
+  rho_loss:
+    holdout_fraction: 0.05
+    selection_mode: online  # online or offline
+    temperature: 1.0
+    use_irreducible_loss_model: false

@@ -1,0 +1,5 @@
+# Baseline: Full data training
+# Upper bound — train on all available data
+
+selection:
+  method: full
