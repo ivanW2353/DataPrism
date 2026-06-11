@@ -319,6 +319,19 @@ python scripts/run_baselines.py \
 
 ---
 
+## 文档
+
+详细运行流程和算法说明见 `docs/` 目录：
+
+| 文档 | 内容 |
+|------|------|
+| [`docs/phase1_tracin.md`](docs/phase1_tracin.md) | Phase 1 离线质控：LoRA TracInCP 自影响计算、异常检测、冗余聚类 |
+| [`docs/phase2_sampling.md`](docs/phase2_sampling.md) | Phase 2 在线采样：重要性采样、温度退火、方差追踪 |
+| [`docs/phase3_reselection.md`](docs/phase3_reselection.md) | Phase 3 迭代重选：多目标 TracInVS、影响力光谱、加权迭代 |
+| [`docs/full_pipeline.md`](docs/full_pipeline.md) | 完整管线：Phase 间数据流、编排逻辑、输出文件 |
+| [`docs/baselines.md`](docs/baselines.md) | 基线方法：LESS、RHO-LOSS、DSIR 的原理与对比 |
+| [`docs/configuration.md`](docs/configuration.md) | 配置系统：参数参考、YAML 层级、CLI 覆盖 |
+
 ## 引用
 
 ### 核心参考
