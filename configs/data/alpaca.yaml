@@ -2,6 +2,7 @@
 
 data:
   name: tatsu-lab/alpaca
+  local_path: /root/autodl-tmp/data/alpaca
   split: train
   num_samples: null
   validation_split: null  # No built-in validation split

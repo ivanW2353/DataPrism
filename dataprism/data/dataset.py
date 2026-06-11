@@ -114,14 +114,24 @@ def load_and_prepare_dataset(
     """
     logger.info("Loading dataset: %s (split=%s)", data_config.name, data_config.split)
 
-    # Load raw dataset
-    try:
-        dataset = load_dataset(data_config.name, split=data_config.split)
-    except Exception:
-        # Some datasets don't have a validation split
-        logger.warning("Split '%s' not found for %s, loading 'train'",
-                       data_config.split, data_config.name)
-        dataset = load_dataset(data_config.name, split="train")
+    # Load from local disk if local_path is set, otherwise from HF hub
+    if data_config.local_path is not None:
+        from datasets import load_from_disk
+        logger.info("Loading from local: %s", data_config.local_path)
+        dataset = load_from_disk(data_config.local_path)
+        # If dataset is a DatasetDict, use the specified split
+        if hasattr(dataset, 'keys'):
+            if data_config.split in dataset:
+                dataset = dataset[data_config.split]
+            else:
+                dataset = dataset[list(dataset.keys())[0]]
+    else:
+        try:
+            dataset = load_dataset(data_config.name, split=data_config.split)
+        except Exception:
+            logger.warning("Split '%s' not found for %s, loading 'train'",
+                           data_config.split, data_config.name)
+            dataset = load_dataset(data_config.name, split="train")
 
     # Subsample if requested
     if data_config.num_samples is not None and data_config.num_samples < len(dataset):

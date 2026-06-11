@@ -62,6 +62,7 @@ class DataConfig:
     """Dataset configuration."""
 
     name: str = "tatsu-lab/alpaca"
+    local_path: Optional[str] = None  # Override: path to local dataset on disk
     split: str = "train"
     num_samples: Optional[int] = None  # None = use all
     validation_split: str = "validation"

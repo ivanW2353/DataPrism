@@ -2,6 +2,7 @@
 
 data:
   name: WizardLM/WizardLM_evol_instruct_V2_196k
+  local_path: /root/autodl-tmp/data/wizardlm
   split: train
   num_samples: null
   validation_split: null

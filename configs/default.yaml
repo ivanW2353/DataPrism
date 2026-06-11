@@ -8,7 +8,7 @@ experiment_name: default
 output_dir: ./outputs
 
 model:
-  name: meta-llama/Meta-Llama-3-8B
+  name: /root/autodl-tmp/models/Meta-Llama-3.1-8B-Instruct
   trust_remote_code: false
   torch_dtype: bfloat16
   use_flash_attention_2: true

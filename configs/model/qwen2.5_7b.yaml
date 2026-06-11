@@ -1,7 +1,7 @@
-# Qwen2.5-7B model configuration
+# Qwen2.5-7B-Instruct model configuration
 
 model:
-  name: Qwen/Qwen2.5-7B
+  name: /root/autodl-tmp/models/Qwen2.5-7B-Instruct
   trust_remote_code: true
   torch_dtype: bfloat16
   use_flash_attention_2: true

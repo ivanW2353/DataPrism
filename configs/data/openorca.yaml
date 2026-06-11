@@ -2,6 +2,7 @@
 
 data:
   name: Open-Orca/OpenOrca
+  local_path: /root/DataPrism/data/openorca
   split: train
   num_samples: null
   validation_split: train  # Use subset for validation
