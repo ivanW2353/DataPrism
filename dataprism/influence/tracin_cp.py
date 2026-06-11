@@ -115,49 +115,17 @@ class TracInCP:
             # Load checkpoint weights into model
             self._checkpoint_manager.load(step, self._model)
 
-            # Batch forward, then per-sample backward to keep GPU busy
-            grad_batch_size = int(kwargs.get("grad_batch_size", 16))
+            # One sample at a time — each forward+backward on GPU (~0.3s)
+            for sample_idx in tqdm(range(n_samples), desc=f"CKPT {step}", leave=False):
+                sample = dataset[sample_idx]
+                input_ids = torch.tensor([sample["input_ids"]], device=self._model.device)
+                attention_mask = torch.tensor([sample["attention_mask"]], device=self._model.device)
+                labels = torch.tensor([sample["labels"]], device=self._model.device)
 
-            for start_idx in tqdm(range(0, n_samples, grad_batch_size), desc=f"CKPT {step}", leave=False):
-                end_idx = min(start_idx + grad_batch_size, n_samples)
-                batch_samples = dataset[start_idx:end_idx]
-
-                # Pad and batch the input
-                ids_list, lbls_list = batch_samples["input_ids"], batch_samples["labels"]
-                max_len = max(len(ids) for ids in ids_list)
-                pad_id = 0  # padding token id
-
-                padded_ids, padded_mask, padded_lbls = [], [], []
-                for ids, lbls in zip(ids_list, lbls_list):
-                    plen = max_len - len(ids)
-                    padded_ids.append(ids + [pad_id] * plen)
-                    padded_mask.append([1] * len(ids) + [0] * plen)
-                    padded_lbls.append(lbls + [-100] * plen)
-
-                batch_ids = torch.tensor(padded_ids, device=self._model.device)
-                batch_mask = torch.tensor(padded_mask, device=self._model.device)
-                batch_lbls = torch.tensor(padded_lbls, device=self._model.device)
-
-                # Single batched forward pass
-                self._model.zero_grad()
-                outputs = self._model(input_ids=batch_ids, attention_mask=batch_mask, labels=batch_lbls)
-
-                # Per-sample backward (one at a time, free immediately)
-                lora_params = [p for p in self._model.parameters() if p.requires_grad]
-                for i in range(batch_ids.shape[0]):
-                    # Compute per-sample loss
-                    sample_mask = (batch_lbls[i] != -100)
-                    sample_loss = torch.nn.functional.cross_entropy(
-                        outputs.logits[i, sample_mask],
-                        batch_lbls[i, sample_mask],
-                    )
-                    grad = torch.autograd.grad(sample_loss, lora_params, retain_graph=True)
-                    grad_tensor = torch.cat([g.view(-1) for g in grad])
-                    grad_norm = grad_tensor.norm(p=2).item()
-                    scores[start_idx + i] += lr * (grad_norm ** 2)
-                    del grad, grad_tensor
-
-            torch.cuda.empty_cache()
+                grad = self._collector.compute_sample_gradient(input_ids, attention_mask, labels)
+                grad_norm = grad.norm(p=2).item()
+                scores[sample_idx] += lr * (grad_norm ** 2)
+                del grad
 
         # Restore original LoRA weights from CPU
         self._model.load_state_dict(
