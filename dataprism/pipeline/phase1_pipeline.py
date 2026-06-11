@@ -74,44 +74,57 @@ class Phase1Pipeline:
         logger.info("LoRA applied: %d trainable parameters",
                     sum(p.numel() for p in peft_model.parameters() if p.requires_grad))
 
-        # Step 2: Initialize checkpoint manager
+        # Step 2: Initialize checkpoint manager (scans existing checkpoints)
         self._checkpoint_manager = CheckpointManager(
             checkpoint_dir=self._phase_config.checkpoint_dir,
             max_checkpoints=self._phase_config.max_checkpoints,
         )
 
-        # Step 3: SFT subset for checkpoint generation
-        sft_n = self._phase_config.sft_num_samples or len(dataset)
-        sft_dataset = dataset.select(range(min(sft_n, len(dataset))))
+        # Step 3: SFT checkpoint generation (skip if already done)
+        existing_ckpts = self._checkpoint_manager.list_checkpoints()
+        if existing_ckpts and not self._phase_config.force_retrain:
+            logger.info("Found %d existing checkpoints, skipping SFT (use force_retrain=true to redo)",
+                       len(existing_ckpts))
+            # Load the last checkpoint's weights into the model
+            last_ckpt = existing_ckpts[-1]
+            self._checkpoint_manager.load(last_ckpt, peft_model)
+            logger.info("Loaded checkpoint-%d weights", last_ckpt)
+        else:
+            if self._phase_config.force_retrain and existing_ckpts:
+                logger.info("Force retrain: clearing %d existing checkpoints", len(existing_ckpts))
+                self._checkpoint_manager.prune_all()
 
-        logger.info("SFT training on %d samples (full dataset: %d)", len(sft_dataset), len(dataset))
+            sft_n = self._phase_config.sft_num_samples or len(dataset)
+            sft_dataset = dataset.select(range(min(sft_n, len(dataset))))
 
-        training_args = TrainingArguments(
-            output_dir=f"{self._config.output_dir}/phase1_sft",
-            num_train_epochs=self._phase_config.num_epochs,
-            per_device_train_batch_size=self._config.training.per_device_train_batch_size,
-            gradient_accumulation_steps=self._config.training.gradient_accumulation_steps,
-            learning_rate=self._config.training.learning_rate,
-            warmup_ratio=self._config.training.warmup_ratio,
-            logging_steps=self._config.training.logging_steps,
-            save_steps=self._config.training.save_steps,
-            fp16=(self._config.model.torch_dtype == "float16"),
-            bf16=(self._config.model.torch_dtype == "bfloat16"),
-            remove_unused_columns=False,
-            report_to="none",
-            run_name=f"{self._config.experiment_name}_phase1",
-            seed=self._config.seed,
-        )
+            logger.info("SFT training on %d samples (full dataset: %d)", len(sft_dataset), len(dataset))
 
-        trainer = DataPrismTrainer(
-            model=peft_model,
-            args=training_args,
-            train_dataset=sft_dataset,
-            tokenizer=tokenizer,
-            checkpoint_manager=self._checkpoint_manager,
-        )
+            training_args = TrainingArguments(
+                output_dir=f"{self._config.output_dir}/phase1_sft",
+                num_train_epochs=self._phase_config.num_epochs,
+                per_device_train_batch_size=self._config.training.per_device_train_batch_size,
+                gradient_accumulation_steps=self._config.training.gradient_accumulation_steps,
+                learning_rate=self._config.training.learning_rate,
+                warmup_ratio=self._config.training.warmup_ratio,
+                logging_steps=self._config.training.logging_steps,
+                save_steps=self._config.training.save_steps,
+                fp16=(self._config.model.torch_dtype == "float16"),
+                bf16=(self._config.model.torch_dtype == "bfloat16"),
+                remove_unused_columns=False,
+                report_to="none",
+                run_name=f"{self._config.experiment_name}_phase1",
+                seed=self._config.seed,
+            )
 
-        trainer.train()
+            trainer = DataPrismTrainer(
+                model=peft_model,
+                args=training_args,
+                train_dataset=sft_dataset,
+                tokenizer=tokenizer,
+                checkpoint_manager=self._checkpoint_manager,
+            )
+
+            trainer.train()
 
         # Save checkpoints at the specified interval
         for step in range(
