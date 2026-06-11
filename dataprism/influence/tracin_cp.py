@@ -87,9 +87,12 @@ class TracInCP:
             lr_sum = sum(learning_rates)
             learning_rates = [lr / lr_sum for lr in learning_rates]
 
-        # Save current model weights to restore after computation
-        import copy
-        original_state = {k: v.clone() for k, v in self._model.state_dict().items()}
+        # Save only LoRA weights to CPU for later restore
+        original_lora = {
+            k: v.detach().cpu().clone()
+            for k, v in self._model.state_dict().items()
+            if "lora_" in k
+        }
 
         logger.info(
             "Computing self-influence for %d samples across %d checkpoints",
@@ -134,8 +137,11 @@ class TracInCP:
 
             torch.cuda.empty_cache()
 
-        # Restore original model weights
-        self._model.load_state_dict(original_state)
+        # Restore original LoRA weights from CPU
+        self._model.load_state_dict(
+            {k: v.to(self._model.device) for k, v in original_lora.items()},
+            strict=False,
+        )
         logger.info(
             "Self-influence computed: mean=%.4f, std=%.4f, min=%.4f, max=%.4f",
             scores.mean(), scores.std(), scores.min(), scores.max(),
@@ -184,9 +190,12 @@ class TracInCP:
         if max_samples is not None:
             training_dataset = training_dataset.select(range(max_samples))
 
-        # Save current model weights to restore after computation
-        import copy
-        original_state = {k: v.clone() for k, v in self._model.state_dict().items()}
+        # Save only LoRA weights to CPU for later restore
+        original_lora_vs = {
+            k: v.detach().cpu().clone()
+            for k, v in self._model.state_dict().items()
+            if "lora_" in k
+        }
 
         logger.info(
             "Computing TracInVS: %d train samples × %d val samples × %d checkpoints",
@@ -233,8 +242,11 @@ class TracInCP:
 
             torch.cuda.empty_cache()
 
-        # Restore original model weights
-        self._model.load_state_dict(original_state)
+        # Restore original LoRA weights from CPU
+        self._model.load_state_dict(
+            {k: v.to(self._model.device) for k, v in original_lora_vs.items()},
+            strict=False,
+        )
         logger.info(
             "TracInVS computed: mean=%.4f, std=%.4f, pos=%.1f%%, neg=%.1f%%",
             scores.mean(), scores.std(),
