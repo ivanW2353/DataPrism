@@ -155,25 +155,35 @@ def _dict_to_config(raw: dict) -> DataPrismConfig:
     The top-level dict may have keys like 'model', 'lora', 'phase1', etc.
     that map to sub-config dataclasses.
     """
-    # Extract known sub-config keys
-    sub_config_keys = {
-        "model", "lora", "training", "data",
-        "phase1", "phase2", "phase3", "evaluation",
+    from dataprism.config.dataclass import (
+        ModelConfig, LoRAConfig, TrainingConfig, DataConfig,
+        Phase1TracInConfig, Phase2ImportanceConfig,
+        Phase3MultiEvalConfig, EvaluationConfig,
+    )
+
+    # Map sub-config keys to their dataclass types
+    sub_config_map = {
+        "model": (ModelConfig, "model"),
+        "lora": (LoRAConfig, "lora"),
+        "training": (TrainingConfig, "training"),
+        "data": (DataConfig, "data"),
+        "phase1": (Phase1TracInConfig, "phase1"),
+        "phase2": (Phase2ImportanceConfig, "phase2"),
+        "phase3": (Phase3MultiEvalConfig, "phase3"),
+        "evaluation": (EvaluationConfig, "evaluation"),
     }
 
     top_level = {}
     sub_configs = {}
 
     for key, value in raw.items():
-        if key in sub_config_keys:
-            sub_configs[key] = value
+        if key in sub_config_map:
+            cls, field_name = sub_config_map[key]
+            sub_configs[field_name] = cls(**value) if isinstance(value, dict) else value
         else:
             top_level[key] = value
 
-    return DataPrismConfig(
-        **top_level,
-        **{k.replace("phase", "phase"): v for k, v in sub_configs.items()},
-    )
+    return DataPrismConfig(**top_level, **sub_configs)
 
 
 def parse_cli_overrides(override_args: Optional[list[str]] = None) -> dict[str, str]:
