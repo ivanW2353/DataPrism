@@ -114,22 +114,27 @@ class TracInCP:
             # Load checkpoint weights into model
             self._checkpoint_manager.load(step, self._model)
 
-            # Compute gradient for each sample and accumulate self-influence
-            for sample_idx in tqdm(range(n_samples), desc=f"CKPT {step}", leave=False):
-                sample = dataset[sample_idx]
+            # Compute per-sample self-influence in mini-batches for speed
+            grad_batch_size = getattr(self._config, 'grad_batch_size', 8) if hasattr(self, '_config') else 8
 
-                input_ids = torch.tensor([sample["input_ids"]], device=self._model.device)
-                attention_mask = torch.tensor([sample["attention_mask"]], device=self._model.device)
-                labels = torch.tensor([sample["labels"]], device=self._model.device)
+            for start_idx in tqdm(range(0, n_samples, grad_batch_size), desc=f"CKPT {step}", leave=False):
+                end_idx = min(start_idx + grad_batch_size, n_samples)
+                batch_samples = dataset[start_idx:end_idx]
 
-                grad = self._collector.compute_sample_gradient(input_ids, attention_mask, labels)
+                # Stack inputs into a batch
+                batch_input_ids = torch.tensor(batch_samples["input_ids"], device=self._model.device)
+                batch_attention_mask = torch.tensor(batch_samples["attention_mask"], device=self._model.device)
+                batch_labels = torch.tensor(batch_samples["labels"], device=self._model.device)
 
-                # Self-influence: gradient L2 norm squared
-                # Higher norm = model works harder to fit = more suspicious
-                grad_norm = grad.norm(p=2).item()
-                self_infl = grad_norm ** 2
+                # Compute per-sample gradients
+                per_sample_grads = self._collector.compute_batch_gradients(
+                    batch_input_ids, batch_attention_mask, batch_labels, per_sample=True,
+                )
 
-                scores[sample_idx] += lr * self_infl
+                for i, grad in enumerate(per_sample_grads):
+                    sample_idx = start_idx + i
+                    grad_norm = grad.norm(p=2).item()
+                    scores[sample_idx] += lr * (grad_norm ** 2)
 
             torch.cuda.empty_cache()
 
