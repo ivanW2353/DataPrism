@@ -126,17 +126,17 @@ class Phase1Pipeline:
 
             trainer.train()
 
-        # Save checkpoints at the specified interval
-        for step in range(
-            0,
-            training_args.num_train_epochs * len(dataset) // training_args.per_device_train_batch_size,
-            self._phase_config.checkpoint_every_n_steps,
-        ):
-            if step > 0:
-                self._checkpoint_manager.save(peft_model, step)
+            # Save checkpoints at the specified interval
+            for step in range(
+                0,
+                training_args.num_train_epochs * len(dataset) // training_args.per_device_train_batch_size,
+                self._phase_config.checkpoint_every_n_steps,
+            ):
+                if step > 0:
+                    self._checkpoint_manager.save(peft_model, step)
 
-        logger.info("SFT complete: %d checkpoints saved",
-                    len(self._checkpoint_manager.list_checkpoints()))
+            logger.info("SFT complete: %d checkpoints saved",
+                       len(self._checkpoint_manager.list_checkpoints()))
 
         # Step 4: Initialize TracInCP
         gradient_collector = GradientCollector(peft_model)
