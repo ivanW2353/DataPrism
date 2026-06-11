@@ -121,10 +121,24 @@ class TracInCP:
                 end_idx = min(start_idx + grad_batch_size, n_samples)
                 batch_samples = dataset[start_idx:end_idx]
 
-                # Stack inputs into a batch
-                batch_input_ids = torch.tensor(batch_samples["input_ids"], device=self._model.device)
-                batch_attention_mask = torch.tensor(batch_samples["attention_mask"], device=self._model.device)
-                batch_labels = torch.tensor(batch_samples["labels"], device=self._model.device)
+                # Pad sequences to same length before stacking
+                input_ids_list = batch_samples["input_ids"]
+                labels_list = batch_samples["labels"]
+                max_len = max(len(ids) for ids in input_ids_list)
+
+                pad_token_id = getattr(self._model, 'config', None)
+                pad_token_id = pad_token_id.pad_token_id if pad_token_id and hasattr(pad_token_id, 'pad_token_id') else 0
+
+                padded_ids, padded_mask, padded_labels = [], [], []
+                for ids, lbls in zip(input_ids_list, labels_list):
+                    pad_len = max_len - len(ids)
+                    padded_ids.append(ids + [pad_token_id] * pad_len)
+                    padded_mask.append([1] * len(ids) + [0] * pad_len)
+                    padded_labels.append(lbls + [-100] * pad_len)
+
+                batch_input_ids = torch.tensor(padded_ids, device=self._model.device)
+                batch_attention_mask = torch.tensor(padded_mask, device=self._model.device)
+                batch_labels = torch.tensor(padded_labels, device=self._model.device)
 
                 # Compute per-sample gradients
                 per_sample_grads = self._collector.compute_batch_gradients(
