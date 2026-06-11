@@ -80,10 +80,11 @@ class Phase1Pipeline:
             max_checkpoints=self._phase_config.max_checkpoints,
         )
 
-        # Step 3: Run initial SFT training to generate checkpoints
-        logger.info("Running initial SFT training (%d epochs, checkpoint every %d steps)",
-                    self._phase_config.num_epochs,
-                    self._phase_config.checkpoint_every_n_steps)
+        # Step 3: SFT subset for checkpoint generation
+        sft_n = self._phase_config.sft_num_samples or len(dataset)
+        sft_dataset = dataset.select(range(min(sft_n, len(dataset))))
+
+        logger.info("SFT training on %d samples (full dataset: %d)", len(sft_dataset), len(dataset))
 
         training_args = TrainingArguments(
             output_dir=f"{self._config.output_dir}/phase1_sft",
@@ -105,7 +106,7 @@ class Phase1Pipeline:
         trainer = DataPrismTrainer(
             model=peft_model,
             args=training_args,
-            train_dataset=dataset,
+            train_dataset=sft_dataset,
             tokenizer=tokenizer,
             checkpoint_manager=self._checkpoint_manager,
         )
@@ -132,7 +133,12 @@ class Phase1Pipeline:
             collector=gradient_collector,
         )
 
-        # Step 5: Initialize influence store and selector
+        # Step 5: TracInCP dataset (can be larger than SFT subset)
+        tracin_n = self._phase_config.tracin_num_samples or len(dataset)
+        tracin_dataset = dataset.select(range(min(tracin_n, len(dataset))))
+        logger.info("TracInCP evaluating %d samples", len(tracin_dataset))
+
+        # Step 6: Initialize influence store and selector
         self._store = InfluenceStore(
             path=self._phase_config.influence_store_path,
             format="npz",
@@ -143,8 +149,8 @@ class Phase1Pipeline:
             store=self._store,
         )
 
-        # Step 6: Filter dataset
-        filtered_dataset = self._selector.select(dataset, model=peft_model, tokenizer=tokenizer)
+        # Step 7: Filter dataset
+        filtered_dataset = self._selector.select(tracin_dataset, model=peft_model, tokenizer=tokenizer)
 
         logger.info("Phase 1 pipeline complete — dataset: %d → %d",
                     len(dataset), len(filtered_dataset))

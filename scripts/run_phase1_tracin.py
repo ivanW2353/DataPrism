@@ -44,7 +44,8 @@ def main():
     print("DataPrism — Phase 1: TracInCP Data Quality Screening")
     print("=" * 60)
 
-    # Load model and data
+    # Load model and full data (pipeline subsamples internally for SFT vs TracIn)
+    config.data.num_samples = None  # Always load full dataset
     model, tokenizer = load_model_and_tokenizer(config.model, device=config.device)
     dataset = load_and_prepare_dataset(config.data, tokenizer)
 

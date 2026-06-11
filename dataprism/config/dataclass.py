@@ -83,6 +83,8 @@ class Phase1TracInConfig:
     num_epochs: int = 2
     checkpoint_every_n_steps: int = 50
     max_checkpoints: int = 20
+    sft_num_samples: Optional[int] = None  # Samples for SFT (None=all)
+    tracin_num_samples: Optional[int] = None  # Samples for TracInCP (None=all, uses full dataset)
 
     # Self-influence computation
     self_influence_method: str = "dot_product"  # dot_product, cosine
