@@ -115,41 +115,24 @@ class TracInCP:
             # Load checkpoint weights into model
             self._checkpoint_manager.load(step, self._model)
 
-            # Compute per-sample self-influence in mini-batches for speed
-            grad_batch_size = int(kwargs.get("grad_batch_size", 8))
+            # Process samples one-at-a-time to keep only 1 gradient in VRAM
+            # (64×672MB gradients would OOM even a 96GB card)
 
-            for start_idx in tqdm(range(0, n_samples, grad_batch_size), desc=f"CKPT {step}", leave=False):
-                end_idx = min(start_idx + grad_batch_size, n_samples)
-                batch_samples = dataset[start_idx:end_idx]
+            for sample_idx in tqdm(range(n_samples), desc=f"CKPT {step}", leave=False):
+                sample = dataset[sample_idx]
 
-                # Pad sequences to same length before stacking
-                input_ids_list = batch_samples["input_ids"]
-                labels_list = batch_samples["labels"]
-                max_len = max(len(ids) for ids in input_ids_list)
+                input_ids = torch.tensor([sample["input_ids"]], device=self._model.device)
+                attention_mask = torch.tensor([sample["attention_mask"]], device=self._model.device)
+                labels = torch.tensor([sample["labels"]], device=self._model.device)
 
-                pad_token_id = getattr(self._model, 'config', None)
-                pad_token_id = pad_token_id.pad_token_id if pad_token_id and hasattr(pad_token_id, 'pad_token_id') else 0
+                grad = self._collector.compute_sample_gradient(input_ids, attention_mask, labels)
+                grad_norm = grad.norm(p=2).item()
+                scores[sample_idx] += lr * (grad_norm ** 2)
 
-                padded_ids, padded_mask, padded_labels = [], [], []
-                for ids, lbls in zip(input_ids_list, labels_list):
-                    pad_len = max_len - len(ids)
-                    padded_ids.append(ids + [pad_token_id] * pad_len)
-                    padded_mask.append([1] * len(ids) + [0] * pad_len)
-                    padded_labels.append(lbls + [-100] * pad_len)
-
-                batch_input_ids = torch.tensor(padded_ids, device=self._model.device)
-                batch_attention_mask = torch.tensor(padded_mask, device=self._model.device)
-                batch_labels = torch.tensor(padded_labels, device=self._model.device)
-
-                # Compute per-sample gradients
-                per_sample_grads = self._collector.compute_batch_gradients(
-                    batch_input_ids, batch_attention_mask, batch_labels, per_sample=True,
-                )
-
-                for i, grad in enumerate(per_sample_grads):
-                    sample_idx = start_idx + i
-                    grad_norm = grad.norm(p=2).item()
-                    scores[sample_idx] += lr * (grad_norm ** 2)
+                # Free gradient immediately
+                del grad
+                if sample_idx % 100 == 0:
+                    torch.cuda.empty_cache()
 
             torch.cuda.empty_cache()
 
