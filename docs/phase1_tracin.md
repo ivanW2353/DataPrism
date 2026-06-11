@@ -119,19 +119,24 @@ scripts/run_phase1_tracin.py                    # 入口脚本
 ## 数据流
 
 ```
-原始数据 (500条)
+原始数据 (52K)
   │
-  ├─ SFT 训练: batch=1, grad_accum=2, 1 epoch
-  │   250 步, ~2.5 分钟 (RTX 4080)
-  │   输出: 10 个 LoRA checkpoint (各 ~640MB)
+  ├─ SFT 训练 (仅用 10K 子集)
+  │   目的: 生成检查点，不需要全量数据
+  │   batch=2, grad_accum=4, 1 epoch
+  │   ~40 分钟
+  │   输出: 5 个 LoRA checkpoint (各 ~640MB)
   │
-  ├─ TracInCP 计算: 10 ckpt × 500 样本
-  │   每样本: forward + backward → 168M 维梯度内积
-  │   输出: 500 个 self-influence 标量
+  ├─ TracInCP 计算 (全量 52K)
+  │   5 ckpt × 52K 样本, 8 样本批处理
+  │   每样本: forward + backward → 168M 维 ||grad||²
+  │   输出: 52K 个 self-influence 标量
   │
-  └─ 筛选: score ≥ 95%分位 → 异常
-           相似分数聚类 → 冗余
-           输出: ~450 条 Clean/Rep 数据
+  └─ 筛选:
+       ① 移除 top-5% 高自影响样本 → 异常 (~2.6K)
+       ② KMeans 聚类去冗余 (~10K)
+       ③ 按分数升序取 top-20% (低分=高质量)
+       输出: ~10K 条 Clean/Rep 数据
 ```
 
 ## 关键配置
@@ -142,10 +147,28 @@ scripts/run_phase1_tracin.py                    # 入口脚本
 | `phase1.checkpoint_every_n_steps` | 50 | 检查点保存间隔 |
 | `phase1.max_checkpoints` | 20 | 最大检查点数（滑动窗口） |
 | `phase1.self_influence_method` | `dot_product` | 自影响计算方式 |
-| `phase1.normalize_gradients` | true | L2 归一化梯度向量 |
+| `phase1.normalize_gradients` | true | L2 归一化梯度向量（仅 TracInVS） |
 | `phase1.outlier_percentile` | 95.0 | 异常阈值百分位 |
 | `phase1.redundancy_method` | `kmeans` | 聚类算法 |
 | `phase1.redundancy_similarity_threshold` | 0.85 | 冗余余弦相似度阈值 |
+| `phase1.target_fraction` | 0.2 | 目标保留比例（20%），自动覆盖 max_samples |
+
+## 关键设计决策
+
+### SFT 子集 vs TracIn 全集
+
+SFT 只用部分数据（如 10K），TracIn 筛选全量数据（如 52K）。原因：
+
+- SFT 的目的是生成不同训练阶段的参数快照（checkpoint），10K 足以让模型经历"从不会到会"的过程
+- TracIn 需要全量数据，因为每一条数据都要被评估
+- 10K 训练出的检查点已经有足够的梯度方向信息来区分好坏
+
+### 保留低分而非高分
+
+自影响分数 = ||grad||²。分数越高，模型越"努力"拟合该样本：
+
+- **低分**: 模型轻松拟合 → 数据干净、格式规范、语义简单 → **保留**
+- **高分**: 模型需要硬记 → 数据有噪声、格式损坏、语义冲突 → **移除**
 
 ## 输出文件
 
