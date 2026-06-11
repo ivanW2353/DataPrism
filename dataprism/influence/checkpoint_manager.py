@@ -115,18 +115,26 @@ class CheckpointManager:
 
         state_dict = load_file(adapter_path)
 
-        # Map checkpoint keys to model keys (strip 'base_model.model.' prefix)
+        # Map checkpoint keys to model keys.
+        # Checkpoint uses format: ...lora_A.weight
+        # Model state_dict uses:  ...lora_A.default.weight
+        # Normalize by stripping '.default' from model keys for comparison.
         model_state = peft_model.state_dict()
+        model_key_map = {k.replace(".default", ""): k for k in model_state}
+
         mapped = {}
         for ckpt_key, tensor in state_dict.items():
-            for model_key in model_state:
-                if model_key.endswith(ckpt_key) or ckpt_key.endswith(model_key):
-                    mapped[model_key] = tensor
-                    break
+            # First try normalized match
+            if ckpt_key in model_key_map:
+                mapped[model_key_map[ckpt_key]] = tensor
+            elif ckpt_key in model_state:
+                mapped[ckpt_key] = tensor
             else:
-                # Try direct key match
-                if ckpt_key in model_state:
-                    mapped[ckpt_key] = tensor
+                # Fallback: suffix match
+                for norm_key, real_key in model_key_map.items():
+                    if norm_key.endswith(ckpt_key) or ckpt_key.endswith(norm_key):
+                        mapped[real_key] = tensor
+                        break
 
         # Load mapped weights
         missing, unexpected = peft_model.load_state_dict(mapped, strict=False)
