@@ -90,8 +90,6 @@ def _find_config_path(config_name: str) -> str:
     """
     if os.path.isabs(config_name) and os.path.exists(config_name):
         return config_name
-    if os.path.exists(config_name):
-        return os.path.abspath(config_name)
 
     # Search in configs/ directory
     project_root = Path(__file__).parent.parent.parent

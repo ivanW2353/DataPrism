@@ -23,8 +23,8 @@ env/
 outputs/
 wandb/
 
-# Models (large binaries)
-models/
+# Models (large binaries — root only)
+/models/
 *.bin
 *.safetensors
 !adapter_model.safetensors
@@ -50,4 +50,9 @@ Thumbs.db
 
 # Papers (already downloaded)
 papers/
-data/
+/data/
+
+# SCOW SLURM scripts (platform-specific)
+scripts/slurm/
+dataprism/utils/time_guard.py
+dataprism/training/time_guard_callback.py

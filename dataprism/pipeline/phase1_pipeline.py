@@ -12,6 +12,7 @@ Orchestrates the complete Phase 1 workflow:
 import logging
 from typing import Optional, Tuple
 
+import torch
 from datasets import Dataset
 from peft import PeftModel
 from transformers import PreTrainedModel, PreTrainedTokenizer, TrainingArguments
@@ -99,17 +100,32 @@ class Phase1Pipeline:
 
             logger.info("SFT training on %d samples (full dataset: %d)", len(sft_dataset), len(dataset))
 
+            # Resolve mixed-precision: bf16 > fp16 > none
+            _bf16, _fp16 = False, False
+            _dtype = self._config.model.torch_dtype
+            if _dtype == "bfloat16" and torch.cuda.is_available() and torch.cuda.is_bf16_supported():
+                _bf16 = True
+            elif _dtype in ("float16", "bfloat16") and torch.cuda.is_available():
+                _fp16 = True
+                logger.info("bfloat16 requested but unsupported by GPU — using float16 instead")
+
             training_args = TrainingArguments(
                 output_dir=f"{self._config.output_dir}/phase1_sft",
                 num_train_epochs=self._phase_config.num_epochs,
                 per_device_train_batch_size=self._config.training.per_device_train_batch_size,
                 gradient_accumulation_steps=self._config.training.gradient_accumulation_steps,
                 learning_rate=self._config.training.learning_rate,
-                warmup_ratio=self._config.training.warmup_ratio,
+                warmup_steps=self._config.training.warmup_steps
+                if hasattr(self._config.training, "warmup_steps") and self._config.training.warmup_steps
+                else int(self._config.training.warmup_ratio
+                         * self._phase_config.num_epochs
+                         * len(sft_dataset)
+                         // (self._config.training.per_device_train_batch_size
+                            * self._config.training.gradient_accumulation_steps)),
                 logging_steps=self._config.training.logging_steps,
                 save_steps=self._config.training.save_steps,
-                fp16=(self._config.model.torch_dtype == "float16"),
-                bf16=(self._config.model.torch_dtype == "bfloat16"),
+                fp16=_fp16,
+                bf16=_bf16,
                 remove_unused_columns=False,
                 report_to="none",
                 run_name=f"{self._config.experiment_name}_phase1",
@@ -123,6 +139,18 @@ class Phase1Pipeline:
                 tokenizer=tokenizer,
                 checkpoint_manager=self._checkpoint_manager,
             )
+
+            # Register time-guard callback if available (SCOW platform)
+            try:
+                from dataprism.training.time_guard_callback import TimeGuardCallback
+                from dataprism.utils.time_guard import TimeGuard
+                guard = TimeGuard.from_environment()
+                trainer.add_callback(
+                    TimeGuardCallback(guard, checkpoint_manager=self._checkpoint_manager)
+                )
+                logger.info("Time-guard callback registered.")
+            except ImportError:
+                pass
 
             trainer.train()
 

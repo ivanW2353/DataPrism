@@ -1,7 +1,7 @@
 # Llama-3.1-8B-Instruct model configuration
 
 model:
-  name: /root/autodl-tmp/models/Meta-Llama-3.1-8B-Instruct
+  name: /home/scc/pb23111715/DataPrism/models/llama3.1-8b-instruct
   trust_remote_code: false
   torch_dtype: bfloat16
   use_flash_attention_2: true
