@@ -40,14 +40,14 @@ scripts/run_phase3_reselect.py
 │   │   │   tracin_cp.compute_multi_objective_influence()
 │   │   │   │
 │   │   │   │   对每个验证维度 j:
-│   │   │   │     Score(z, Vⱼ) = Σᵢ ηᵢ · ∇ℓ(z;θᵢ) · ∇ℓ(Vⱼ;θᵢ)
+│   │   │   │     $$\text{Score}(z, V_j) = \sum_{i=1}^{K} \eta_i \cdot \nabla_\theta \ell(z; \theta_i) \cdot \nabla_\theta \ell(V_j; \theta_i)$$
 │   │   │   │     │
-│   │   │   │     │  ∇ℓ(z;θᵢ)     ← 训练样本 z 在检查点 i 的 LoRA 梯度
-│   │   │   │     │  ∇ℓ(Vⱼ;θᵢ)    ← 验证集 Vⱼ 在检查点 i 的平均 LoRA 梯度
-│   │   │   │     │  dot product   ← 两者方向一致 → 正影响; 相反 → 负影响
+│   │   │   │     │  $\nabla\ell(z;\theta_i)$   ← 训练样本 z 在检查点 i 的 LoRA 梯度
+│   │   │   │     │  $\nabla\ell(V_j;\theta_i)$ ← 验证集 Vⱼ 在检查点 i 的平均 LoRA 梯度
+│   │   │   │     │  dot product              ← 两者方向一致 → 正影响; 相反 → 负影响
 │   │   │   │
 │   │   │   │   聚合:
-│   │   │   │     TotalScore(z) = Σⱼ λⱼ · Score(z, Vⱼ)
+│   │   │   │     $$\text{TotalScore}(z) = \sum_j \lambda_j \cdot \text{Score}(z, V_j)$$
 │   │   │   │     │
 │   │   │   │     │  λ_reasoning = 0.30  (推理最重要)
 │   │   │   │     │  λ_safety    = 0.25
