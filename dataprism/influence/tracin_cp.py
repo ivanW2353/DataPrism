@@ -54,6 +54,7 @@ class TracInCP:
         dataset: Dataset,
         learning_rates: Optional[list[float]] = None,
         normalize_gradients: bool = True,
+        **kwargs,
     ) -> tuple[np.ndarray, list[int]]:
         """Compute self-influence for each sample in the dataset.
 
@@ -115,7 +116,7 @@ class TracInCP:
             self._checkpoint_manager.load(step, self._model)
 
             # Compute per-sample self-influence in mini-batches for speed
-            grad_batch_size = getattr(self._config, 'grad_batch_size', 8) if hasattr(self, '_config') else 8
+            grad_batch_size = int(kwargs.get("grad_batch_size", 8))
 
             for start_idx in tqdm(range(0, n_samples, grad_batch_size), desc=f"CKPT {step}", leave=False):
                 end_idx = min(start_idx + grad_batch_size, n_samples)

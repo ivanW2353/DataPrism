@@ -85,6 +85,7 @@ class Phase1TracInConfig:
     max_checkpoints: int = 20
     sft_num_samples: Optional[int] = None  # Samples for SFT (None=all)
     tracin_num_samples: Optional[int] = None  # Samples for TracInCP (None=all, uses full dataset)
+    grad_batch_size: int = 8  # Batch size for per-sample gradient computation
 
     # Self-influence computation
     self_influence_method: str = "dot_product"  # dot_product, cosine

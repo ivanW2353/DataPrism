@@ -113,6 +113,7 @@ class TracInSelector(DataSelector):
         scores, _ = self._tracin.compute_self_influence(
             dataset,
             normalize_gradients=self._config.normalize_gradients,
+            grad_batch_size=self._config.grad_batch_size,
         )
 
         # Step 2: Detect outliers
