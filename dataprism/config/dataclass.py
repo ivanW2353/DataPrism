@@ -97,6 +97,7 @@ class Phase1TracInConfig:
     redundancy_similarity_threshold: float = 0.85
     redundancy_clusters: Optional[int] = None  # Auto-determined if None
     max_samples_after_redundancy: int = 50000
+    target_fraction: float = 0.2  # Fraction of original data to retain (0.2 = 20%)
 
     # Storage
     checkpoint_dir: str = "outputs/checkpoints/phase1"

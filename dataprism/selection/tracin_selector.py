@@ -95,9 +95,16 @@ class TracInSelector(DataSelector):
             )
 
         n_total = len(dataset)
+
+        # Auto-set max_samples from target_fraction if not explicitly overridden
+        if self._config.target_fraction > 0 and self._config.max_samples_after_redundancy == 50000:
+            self._config.max_samples_after_redundancy = max(100, int(n_total * self._config.target_fraction))
+
         logger.info("=" * 50)
         logger.info("Phase 1: TracInCP Data Quality Screening")
         logger.info("  Input samples: %d", n_total)
+        logger.info("  Target fraction: %.0f%%", self._config.target_fraction * 100)
+        logger.info("  Target output: %d", self._config.max_samples_after_redundancy)
         logger.info("  Outlier percentile: %.1f", self._config.outlier_percentile)
         logger.info("  Redundancy threshold: %.2f", self._config.redundancy_similarity_threshold)
         logger.info("=" * 50)
@@ -178,13 +185,15 @@ class TracInSelector(DataSelector):
             keep_mask = ~outlier_mask
             keep_indices = np.where(keep_mask)[0]
 
-        # Enforce maximum samples (keep highest-influence samples)
+        # Enforce maximum samples — keep samples with LOWEST self-influence
+        # (low self-influence = easy to learn = likely clean/high-quality)
         if (self._config.max_samples_after_redundancy is not None
                 and len(keep_indices) > self._config.max_samples_after_redundancy):
-            # Keep samples with highest absolute influence
-            top_k = np.argsort(np.abs(scores[keep_indices]))[-self._config.max_samples_after_redundancy:]
-            keep_indices = keep_indices[top_k]
-            logger.info("Truncated to %d samples (max limit)", len(keep_indices))
+            # Sort by ascending self-influence (best first)
+            sorted_idx = np.argsort(scores[keep_indices])
+            keep_indices = keep_indices[sorted_idx[:self._config.max_samples_after_redundancy]]
+            logger.info("Truncated to %d samples (max limit, kept lowest self-influence)",
+                        len(keep_indices))
 
         # Step 6: Build filtered dataset
         filtered_dataset = dataset.select(keep_indices.tolist())
