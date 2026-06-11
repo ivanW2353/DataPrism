@@ -124,14 +124,10 @@ class TracInCP:
 
                 grad = self._collector.compute_sample_gradient(input_ids, attention_mask, labels)
 
-                # Self-influence: gradient dot product with itself
-                if normalize_gradients:
-                    grad_norm = grad.norm(p=2)
-                    if grad_norm > 0:
-                        grad = grad / grad_norm
-                    self_infl = 1.0  # Normalized self-influence = 1.0
-                else:
-                    self_infl = (grad * grad).sum().item()
+                # Self-influence: gradient L2 norm squared
+                # Higher norm = model works harder to fit = more suspicious
+                grad_norm = grad.norm(p=2).item()
+                self_infl = grad_norm ** 2
 
                 scores[sample_idx] += lr * self_infl
 
