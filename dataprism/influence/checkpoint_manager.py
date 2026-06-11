@@ -85,17 +85,21 @@ class CheckpointManager:
         logger.info("Checkpoint saved at step %d (%d total)", step, len(self._registry))
         return str(checkpoint_path)
 
-    def load(self, step: int, base_model) -> PeftModel:
-        """Load a LoRA checkpoint onto a base model.
+    def load(self, step: int, peft_model: PeftModel) -> PeftModel:
+        """Load a LoRA checkpoint by applying its state_dict to the given PeftModel.
+
+        This modifies the model in-place and returns it. More efficient than
+        creating a new PeftModel instance (avoids adapter name conflicts).
 
         Args:
             step: Training step of the checkpoint.
-            base_model: The pretrained base model (without LoRA).
+            peft_model: The current PeftModel to apply checkpoint weights to.
 
         Returns:
-            PeftModel with the loaded LoRA adapter.
+            The same PeftModel with checkpoint weights applied.
         """
-        from peft import PeftModel as PEFTModel
+        import torch
+        from safetensors.torch import load_file
 
         if step not in self._registry:
             available = sorted(self._registry.keys())
@@ -104,9 +108,35 @@ class CheckpointManager:
             )
 
         checkpoint_path = self._registry[step]
-        model = PEFTModel.from_pretrained(base_model, str(checkpoint_path))
-        logger.info("Checkpoint loaded: step=%d, path=%s", step, checkpoint_path)
-        return model
+        adapter_path = os.path.join(str(checkpoint_path), "adapter_model.safetensors")
+
+        if not os.path.exists(adapter_path):
+            raise FileNotFoundError(f"Adapter weights not found at {adapter_path}")
+
+        state_dict = load_file(adapter_path)
+
+        # Map checkpoint keys to model keys (strip 'base_model.model.' prefix)
+        model_state = peft_model.state_dict()
+        mapped = {}
+        for ckpt_key, tensor in state_dict.items():
+            for model_key in model_state:
+                if model_key.endswith(ckpt_key) or ckpt_key.endswith(model_key):
+                    mapped[model_key] = tensor
+                    break
+            else:
+                # Try direct key match
+                if ckpt_key in model_state:
+                    mapped[ckpt_key] = tensor
+
+        # Load mapped weights
+        missing, unexpected = peft_model.load_state_dict(mapped, strict=False)
+        if missing:
+            logger.warning("Missing keys when loading checkpoint-%d: %d", step, len(missing))
+        if unexpected:
+            logger.warning("Unexpected keys when loading checkpoint-%d: %d", step, len(unexpected))
+
+        logger.info("Checkpoint loaded into model: step=%d", step)
+        return peft_model
 
     def list_checkpoints(self) -> list[int]:
         """Return sorted list of saved checkpoint steps."""

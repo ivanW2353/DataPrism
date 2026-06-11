@@ -87,6 +87,10 @@ class TracInCP:
             lr_sum = sum(learning_rates)
             learning_rates = [lr / lr_sum for lr in learning_rates]
 
+        # Save current model weights to restore after computation
+        import copy
+        original_state = {k: v.clone() for k, v in self._model.state_dict().items()}
+
         logger.info(
             "Computing self-influence for %d samples across %d checkpoints",
             len(dataset), K,
@@ -104,9 +108,8 @@ class TracInCP:
                 ckpt_idx + 1, K, step, lr,
             )
 
-            # Load checkpoint
-            ckpt_model = self._checkpoint_manager.load(step, self._model.base_model)
-            collector = GradientCollector(ckpt_model)
+            # Load checkpoint weights into model
+            self._checkpoint_manager.load(step, self._model)
 
             # Compute gradient for each sample and accumulate self-influence
             for sample_idx in tqdm(range(n_samples), desc=f"CKPT {step}", leave=False):
@@ -116,7 +119,7 @@ class TracInCP:
                 attention_mask = torch.tensor([sample["attention_mask"]], device=self._model.device)
                 labels = torch.tensor([sample["labels"]], device=self._model.device)
 
-                grad = collector.compute_sample_gradient(input_ids, attention_mask, labels)
+                grad = self._collector.compute_sample_gradient(input_ids, attention_mask, labels)
 
                 # Self-influence: gradient dot product with itself
                 if normalize_gradients:
@@ -129,10 +132,10 @@ class TracInCP:
 
                 scores[sample_idx] += lr * self_infl
 
-            # Cleanup checkpoint model
-            del ckpt_model
             torch.cuda.empty_cache()
 
+        # Restore original model weights
+        self._model.load_state_dict(original_state)
         logger.info(
             "Self-influence computed: mean=%.4f, std=%.4f, min=%.4f, max=%.4f",
             scores.mean(), scores.std(), scores.min(), scores.max(),
@@ -181,6 +184,10 @@ class TracInCP:
         if max_samples is not None:
             training_dataset = training_dataset.select(range(max_samples))
 
+        # Save current model weights to restore after computation
+        import copy
+        original_state = {k: v.clone() for k, v in self._model.state_dict().items()}
+
         logger.info(
             "Computing TracInVS: %d train samples × %d val samples × %d checkpoints",
             n_train, len(validation_dataset), K,
@@ -191,13 +198,12 @@ class TracInCP:
         for ckpt_idx, (step, lr) in enumerate(zip(checkpoints, learning_rates)):
             logger.info("Checkpoint %d/%d (step=%d)", ckpt_idx + 1, K, step)
 
-            # Load checkpoint
-            ckpt_model = self._checkpoint_manager.load(step, self._model.base_model)
-            collector = GradientCollector(ckpt_model)
+            # Load checkpoint weights into model
+            self._checkpoint_manager.load(step, self._model)
 
             # Compute average validation gradient (reused for all training samples)
             logger.info("  Computing validation set average gradient...")
-            val_avg_grad = collector.compute_validation_average_gradient(
+            val_avg_grad = self._collector.compute_validation_average_gradient(
                 validation_dataset,
                 batch_size=4,
             )
@@ -215,19 +221,20 @@ class TracInCP:
                 attention_mask = torch.tensor([sample["attention_mask"]], device=self._model.device)
                 labels = torch.tensor([sample["labels"]], device=self._model.device)
 
-                train_grad = collector.compute_sample_gradient(
+                train_grad = self._collector.compute_sample_gradient(
                     input_ids, attention_mask, labels,
                 )
 
                 # Influence = dot product of training and validation gradients
-                influence = collector.gradient_dot_product(
+                influence = self._collector.gradient_dot_product(
                     train_grad, val_avg_grad, normalize=normalize_gradients,
                 )
                 scores[sample_idx] += lr * influence
 
-            del ckpt_model
             torch.cuda.empty_cache()
 
+        # Restore original model weights
+        self._model.load_state_dict(original_state)
         logger.info(
             "TracInVS computed: mean=%.4f, std=%.4f, pos=%.1f%%, neg=%.1f%%",
             scores.mean(), scores.std(),
