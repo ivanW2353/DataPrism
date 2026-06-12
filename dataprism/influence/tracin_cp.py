@@ -24,6 +24,37 @@ from dataprism.influence.gradient_collector import GradientCollector
 logger = logging.getLogger("dataprism.influence.tracin")
 
 
+def _collate_and_pad(batch: dict, pad_token_id: int = 0) -> dict:
+    """Pad sequences in a batch to the same length.
+
+    Args:
+        batch: Dict with 'input_ids', 'attention_mask', 'labels' as lists.
+        pad_token_id: Token id used for padding (default: 0).
+
+    Returns:
+        Dict with padded tensors of shape (batch_size, max_len).
+    """
+    import torch
+
+    input_ids = [torch.tensor(x) for x in batch["input_ids"]]
+    attention_mask = [torch.tensor(x) for x in batch["attention_mask"]]
+    labels = [torch.tensor(x) for x in batch["labels"]]
+
+    max_len = max(x.size(0) for x in input_ids)
+
+    def pad(tensors, value):
+        padded = torch.full((len(tensors), max_len), value, dtype=tensors[0].dtype)
+        for i, t in enumerate(tensors):
+            padded[i, :t.size(0)] = t
+        return padded
+
+    return {
+        "input_ids": pad(input_ids, pad_token_id),
+        "attention_mask": pad(attention_mask, 0),
+        "labels": pad(labels, -100),
+    }
+
+
 class TracInCP:
     """TracInCP influence computation adapted to LoRA parameter space.
 
@@ -115,17 +146,29 @@ class TracInCP:
             # Load checkpoint weights into model
             self._checkpoint_manager.load(step, self._model)
 
-            # One sample at a time — each forward+backward on GPU (~0.3s)
-            for sample_idx in tqdm(range(n_samples), desc=f"CKPT {step}", leave=False):
-                sample = dataset[sample_idx]
-                input_ids = torch.tensor([sample["input_ids"]], device=self._model.device)
-                attention_mask = torch.tensor([sample["attention_mask"]], device=self._model.device)
-                labels = torch.tensor([sample["labels"]], device=self._model.device)
+            # Batch forward + per-sample backward for efficiency
+            batch_size = 4  # GPU-dependent — adjust for memory
+            for batch_start in tqdm(range(0, n_samples, batch_size), desc=f"CKPT {step}", leave=False):
+                batch_end = min(batch_start + batch_size, n_samples)
+                batch = dataset[batch_start:batch_end]
 
-                grad = self._collector.compute_sample_gradient(input_ids, attention_mask, labels)
-                grad_norm = grad.norm(p=2).item()
-                scores[sample_idx] += lr * (grad_norm ** 2)
-                del grad
+                # Pad to max length in batch
+                collated = _collate_and_pad(batch, pad_token_id=0)
+                input_ids = collated["input_ids"].to(self._model.device)
+                attention_mask = collated["attention_mask"].to(self._model.device)
+                labels = collated["labels"].to(self._model.device)
+
+                per_sample_grads = self._collector.compute_batch_gradients(
+                    input_ids, attention_mask, labels, per_sample=True,
+                )
+
+                for j, grad in enumerate(per_sample_grads):
+                    sample_idx = batch_start + j
+                    grad_norm = grad.norm(p=2).item()
+                    scores[sample_idx] += lr * (grad_norm ** 2)
+                    del grad
+
+                del per_sample_grads
 
         # Restore original LoRA weights from CPU
         self._model.load_state_dict(
@@ -212,23 +255,30 @@ class TracInCP:
                     val_avg_grad.unsqueeze(0), p=2, dim=1
                 ).squeeze(0)
 
-            # Compute per-sample influence
-            for sample_idx in tqdm(range(n_train), desc=f"CKPT {step}", leave=False):
-                sample = training_dataset[sample_idx]
+            # Batch forward + per-sample backward
+            batch_size = 4
+            for batch_start in tqdm(range(0, n_train, batch_size), desc=f"CKPT {step}", leave=False):
+                batch_end = min(batch_start + batch_size, n_train)
+                batch = training_dataset[batch_start:batch_end]
 
-                input_ids = torch.tensor([sample["input_ids"]], device=self._model.device)
-                attention_mask = torch.tensor([sample["attention_mask"]], device=self._model.device)
-                labels = torch.tensor([sample["labels"]], device=self._model.device)
+                collated = _collate_and_pad(batch, pad_token_id=0)
+                input_ids = collated["input_ids"].to(self._model.device)
+                attention_mask = collated["attention_mask"].to(self._model.device)
+                labels = collated["labels"].to(self._model.device)
 
-                train_grad = self._collector.compute_sample_gradient(
-                    input_ids, attention_mask, labels,
+                per_sample_grads = self._collector.compute_batch_gradients(
+                    input_ids, attention_mask, labels, per_sample=True,
                 )
 
-                # Influence = dot product of training and validation gradients
-                influence = self._collector.gradient_dot_product(
-                    train_grad, val_avg_grad, normalize=normalize_gradients,
-                )
-                scores[sample_idx] += lr * influence
+                for j, train_grad in enumerate(per_sample_grads):
+                    sample_idx = batch_start + j
+                    influence = self._collector.gradient_dot_product(
+                        train_grad, val_avg_grad, normalize=normalize_gradients,
+                    )
+                    scores[sample_idx] += lr * influence
+                    del train_grad
+
+                del per_sample_grads
 
             torch.cuda.empty_cache()
 

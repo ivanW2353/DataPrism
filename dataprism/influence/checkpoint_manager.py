@@ -42,7 +42,7 @@ class CheckpointManager:
             checkpoint_dir: Root directory for storing checkpoints.
             max_checkpoints: Maximum number of checkpoints to retain.
         """
-        self._checkpoint_dir = Path(checkpoint_dir)
+        self._checkpoint_dir = Path(checkpoint_dir).resolve()
         self._max_checkpoints = max_checkpoints
 
         # Ordered dict: step → checkpoint path (FIFO for pruning)

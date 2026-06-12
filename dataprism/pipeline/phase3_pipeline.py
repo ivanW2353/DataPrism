@@ -10,6 +10,7 @@ Orchestrates the Phase 3 workflow:
 """
 
 import logging
+import os
 from typing import Optional
 
 import numpy as np
@@ -121,7 +122,7 @@ class Phase3Pipeline:
             logger.info("Phase 3 - Round %d/%d", round_num, self._phase_config.max_rounds)
 
             training_args = TrainingArguments(
-                output_dir=f"{self._config.output_dir}/phase3_round{round_num}",
+                output_dir=os.path.abspath(f"{self._config.output_dir}/phase3_round{round_num}"),
                 num_train_epochs=1,  # One epoch per round
                 per_device_train_batch_size=self._config.training.per_device_train_batch_size,
                 gradient_accumulation_steps=self._config.training.gradient_accumulation_steps,

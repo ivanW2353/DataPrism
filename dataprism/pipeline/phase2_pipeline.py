@@ -8,6 +8,7 @@ Orchestrates importance-sampled training:
 """
 
 import logging
+import os
 from typing import Optional
 
 import torch
@@ -94,7 +95,7 @@ class Phase2Pipeline:
 
         # Step 5: Train with importance sampling
         training_args = TrainingArguments(
-            output_dir=f"{self._config.output_dir}/phase2_training",
+            output_dir=os.path.abspath(f"{self._config.output_dir}/phase2_training"),
             num_train_epochs=self._config.training.num_epochs,
             per_device_train_batch_size=self._config.training.per_device_train_batch_size,
             gradient_accumulation_steps=self._config.training.gradient_accumulation_steps,

@@ -109,8 +109,11 @@ class Phase1Pipeline:
                 _fp16 = True
                 logger.info("bfloat16 requested but unsupported by GPU — using float16 instead")
 
+            # Use absolute path to prevent safetensors temp-file issues
+            import os
+            output_dir = os.path.abspath(f"{self._config.output_dir}/phase1_sft")
             training_args = TrainingArguments(
-                output_dir=f"{self._config.output_dir}/phase1_sft",
+                output_dir=output_dir,
                 num_train_epochs=self._phase_config.num_epochs,
                 per_device_train_batch_size=self._config.training.per_device_train_batch_size,
                 gradient_accumulation_steps=self._config.training.gradient_accumulation_steps,

@@ -31,7 +31,7 @@ class InfluenceStore:
             path: File path for the store (without extension).
             format: Storage format: 'npz' or 'h5'.
         """
-        self._base_path = Path(path).with_suffix("")
+        self._base_path = Path(path).resolve().with_suffix("")
         self._format = format
 
     def save_self_influence(
