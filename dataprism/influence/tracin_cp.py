@@ -85,6 +85,8 @@ class TracInCP:
         dataset: Dataset,
         learning_rates: Optional[list[float]] = None,
         normalize_gradients: bool = True,
+        max_checkpoints: int = 6,
+        max_samples: Optional[int] = None,
         **kwargs,
     ) -> tuple[np.ndarray, list[int]]:
         """Compute self-influence for each sample in the dataset.
@@ -99,23 +101,36 @@ class TracInCP:
             learning_rates: Learning rates for each checkpoint (η_i).
                            If None, assumes equal weight 1/K.
             normalize_gradients: L2-normalize gradients before dot product.
+            max_checkpoints: Max number of checkpoints to use (subsample if more).
+            max_samples: Max number of samples to process (None = all).
 
         Returns:
             Tuple of (scores_array, sample_indices).
             scores_array shape: (len(dataset),)
         """
-        checkpoints = self._checkpoint_manager.list_checkpoints()
+        all_checkpoints = self._checkpoint_manager.list_checkpoints()
 
-        if not checkpoints:
+        if not all_checkpoints:
             raise RuntimeError(
                 "No checkpoints available. Run initial SFT training first."
             )
+
+        # Subsample checkpoints if too many (first + last + evenly spaced)
+        if len(all_checkpoints) > max_checkpoints:
+            indices = [0] + [
+                int(i * (len(all_checkpoints) - 1) / (max_checkpoints - 1))
+                for i in range(1, max_checkpoints)
+            ]
+            checkpoints = [all_checkpoints[i] for i in indices]
+            logger.info("Using %d/%d checkpoints: %s", len(checkpoints), len(all_checkpoints),
+                        [str(c) for c in checkpoints])
+        else:
+            checkpoints = all_checkpoints
 
         K = len(checkpoints)
         if learning_rates is None:
             learning_rates = [1.0 / K] * K
         else:
-            # Normalize learning rates to sum to 1
             lr_sum = sum(learning_rates)
             learning_rates = [lr / lr_sum for lr in learning_rates]
 
@@ -126,13 +141,16 @@ class TracInCP:
             if "lora_" in k
         }
 
-        logger.info(
-            "Computing self-influence for %d samples across %d checkpoints",
-            len(dataset), K,
-        )
+        if max_samples is not None and max_samples < len(dataset):
+            dataset = dataset.select(range(max_samples))
 
         n_samples = len(dataset)
         scores = np.zeros(n_samples, dtype=np.float32)
+
+        logger.info(
+            "Computing self-influence for %d samples across %d checkpoints",
+            n_samples, K,
+        )
 
         # For each checkpoint, compute and accumulate self-influence
         for ckpt_idx, (step, lr) in enumerate(
@@ -146,8 +164,8 @@ class TracInCP:
             # Load checkpoint weights into model
             self._checkpoint_manager.load(step, self._model)
 
-            # Batch forward + per-sample backward for efficiency
-            batch_size = 4  # GPU-dependent — adjust for memory
+            # Per-sample forward+backward (batched data access for efficiency)
+            batch_size = 4
             for batch_start in tqdm(range(0, n_samples, batch_size), desc=f"CKPT {step}", leave=False):
                 batch_end = min(batch_start + batch_size, n_samples)
                 batch = dataset[batch_start:batch_end]

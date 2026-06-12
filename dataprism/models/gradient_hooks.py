@@ -109,11 +109,8 @@ def compute_per_sample_lora_gradients(
 ) -> List[torch.Tensor]:
     """Compute per-sample LoRA gradients for a batch.
 
-    Uses batch forward + per-sample backward via torch.autograd.grad:
-    one forward pass computes logits for the whole batch, then per-sample
-    losses are differentiated individually.  For decoder-only transformers
-    there is no cross-sample interaction, so each sample's gradient is
-    correct and independent.
+    Each sample gets its own forward+backward pass.  This is simpler and
+    avoids retain_graph overhead that causes O(N²) memory growth.
 
     Args:
         model: PeftModel with LoRA adapters.
@@ -126,42 +123,23 @@ def compute_per_sample_lora_gradients(
         List of 1D tensors, one per sample, each of shape (total_lora_dim,).
     """
     batch_size = input_ids.size(0)
-    lora_params = [p for n, p in model.named_parameters()
-                   if p.requires_grad and "lora_" in n]
-
-    # Single batched forward pass with gradient computation enabled.
-    # Activations are retained so per-sample autograd.grad is cheap.
-    outputs = model(
-        input_ids=input_ids,
-        attention_mask=attention_mask,
-    )
-    logits = outputs.logits  # (batch_size, seq_len, vocab_size)
-
-    # Shift for causal LM loss
-    shift_logits = logits[..., :-1, :].contiguous()
-    shift_labels = labels[..., 1:].contiguous()
-
     per_sample_grads: List[torch.Tensor] = []
 
     for i in range(batch_size):
-        # Per-sample cross-entropy loss
-        sample_logits = shift_logits[i:i+1]  # (1, seq_len, vocab_size)
-        sample_labels = shift_labels[i:i+1]  # (1, seq_len)
+        sample_ids = input_ids[i:i+1]
+        sample_mask = attention_mask[i:i+1]
+        sample_labels = labels[i:i+1]
 
-        loss = torch.nn.functional.cross_entropy(
-            sample_logits.view(-1, sample_logits.size(-1)),
-            sample_labels.view(-1),
-            reduction="mean",
+        model.zero_grad(set_to_none=True)
+        outputs = model(
+            input_ids=sample_ids,
+            attention_mask=sample_mask,
+            labels=sample_labels,
         )
+        loss = outputs.loss
+        loss.backward()
 
-        # Compute d(loss_i)/d(params) using batched forward activations
-        grads_i = torch.autograd.grad(loss, lora_params, retain_graph=True)
-
-        # Flatten manually (Capture.get_flattened_gradients depends on .grad)
-        grad_vec = torch.cat([g.detach().view(-1) for g in grads_i])
-        per_sample_grads.append(grad_vec)
-
-    # Clean up computation graph
-    model.zero_grad()
+        grads = capture.get_flattened_gradients()
+        per_sample_grads.append(grads.clone())
 
     return per_sample_grads
