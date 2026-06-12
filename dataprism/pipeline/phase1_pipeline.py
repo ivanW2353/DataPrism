@@ -72,6 +72,11 @@ class Phase1Pipeline:
         # Step 1: Apply LoRA
         from dataprism.models.lora_manager import apply_lora, get_lora_parameter_names
         peft_model = apply_lora(model, self._config.lora)
+
+        # Ensure model is fully on GPU (device_map="auto" may leave layers on CPU)
+        if "cuda" in str(self._config.device) or torch.cuda.is_available():
+            peft_model = peft_model.to(torch.device(self._config.device))
+            logger.info("Model moved to %s", self._config.device)
         logger.info("LoRA applied: %d trainable parameters",
                     sum(p.numel() for p in peft_model.parameters() if p.requires_grad))
 
