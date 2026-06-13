@@ -142,4 +142,7 @@ def compute_per_sample_lora_gradients(
         grads = capture.get_flattened_gradients()
         per_sample_grads.append(grads.clone())
 
+        # Free logits immediately (~500MB per sample in fp16×vocab)
+        del outputs, loss
+
     return per_sample_grads

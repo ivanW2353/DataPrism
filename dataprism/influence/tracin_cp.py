@@ -186,7 +186,11 @@ class TracInCP:
                     scores[sample_idx] += lr * (grad_norm ** 2)
                     del grad
 
-                del per_sample_grads
+                del per_sample_grads, collated, input_ids, attention_mask, labels
+
+                # Periodic GPU cache cleanup (every 500 batches)
+                if batch_start % (500 * batch_size) == 0:
+                    torch.cuda.empty_cache()
 
         # Restore original LoRA weights from CPU
         self._model.load_state_dict(
@@ -296,7 +300,11 @@ class TracInCP:
                     scores[sample_idx] += lr * influence
                     del train_grad
 
-                del per_sample_grads
+                del per_sample_grads, collated, input_ids, attention_mask, labels
+
+                # Periodic GPU cache cleanup (every 500 batches)
+                if batch_start % (500 * batch_size) == 0:
+                    torch.cuda.empty_cache()
 
             torch.cuda.empty_cache()
 
