@@ -147,6 +147,21 @@ class TracInCP:
         n_samples = len(dataset)
         scores = np.zeros(n_samples, dtype=np.float32)
 
+        # Resume support: save/load partial scores
+        import os
+        resume_path = os.path.join(
+            os.path.dirname(str(self._checkpoint_manager.checkpoint_dir)),
+            "phase1_scores_resume.npz",
+        )
+        os.makedirs(os.path.dirname(resume_path), exist_ok=True)
+        start_ckpt_idx = 0
+        if os.path.exists(resume_path):
+            data = np.load(resume_path, allow_pickle=True)
+            scores = data["scores"]
+            start_ckpt_idx = int(data["ckpt_idx"])
+            logger.info("Resuming from checkpoint %d/%d (%.1f%% scores done)",
+                       start_ckpt_idx, K, 100 * (scores > 0).mean())
+
         logger.info(
             "Computing self-influence for %d samples across %d checkpoints",
             n_samples, K,
@@ -156,6 +171,11 @@ class TracInCP:
         for ckpt_idx, (step, lr) in enumerate(
             zip(checkpoints, learning_rates)
         ):
+            if ckpt_idx < start_ckpt_idx:
+                logger.info("Skipping checkpoint %d/%d (step=%d) — already done",
+                           ckpt_idx + 1, K, step)
+                continue
+
             logger.info(
                 "Checkpoint %d/%d (step=%d, lr=%.6f)",
                 ckpt_idx + 1, K, step, lr,
@@ -191,6 +211,18 @@ class TracInCP:
                 # Periodic GPU cache cleanup (every 500 batches)
                 if batch_start % (500 * batch_size) == 0:
                     torch.cuda.empty_cache()
+
+                # Save progress every 2000 batches for resume
+                if batch_start > 0 and batch_start % (2000 * batch_size) == 0:
+                    np.savez_compressed(resume_path, scores=scores, ckpt_idx=ckpt_idx)
+                    logger.debug("Resume saved: ckpt=%d batch=%d", ckpt_idx, batch_start)
+
+            # Save after each completed checkpoint
+            np.savez_compressed(resume_path, scores=scores, ckpt_idx=ckpt_idx + 1)
+
+        # Clean up resume file on successful completion
+        if os.path.exists(resume_path):
+            os.remove(resume_path)
 
         # Restore original LoRA weights from CPU
         self._model.load_state_dict(
