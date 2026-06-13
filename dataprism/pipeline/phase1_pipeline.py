@@ -77,6 +77,12 @@ class Phase1Pipeline:
         if "cuda" in str(self._config.device) or torch.cuda.is_available():
             peft_model = peft_model.to(torch.device(self._config.device))
             logger.info("Model moved to %s", self._config.device)
+
+        # Disable gradient checkpointing for TracInCP — per-sample backward
+        # doesn't need memory savings and it causes OOM via activation accumulation
+        if hasattr(peft_model, "is_gradient_checkpointing") and peft_model.is_gradient_checkpointing:
+            peft_model.gradient_checkpointing_disable()
+            logger.info("Gradient checkpointing disabled for TracInCP")
         logger.info("LoRA applied: %d trainable parameters",
                     sum(p.numel() for p in peft_model.parameters() if p.requires_grad))
 
